@@ -1,0 +1,157 @@
+# ☁️ AWS Secure Infrastructure Lab: EC2, RDS, S3 & IAM Integration
+
+> **Laboratório Prático de Cloud Computing**
+>
+> *Foco: Arquitetura de Redes, Segurança, Gestão de Identidade e Persistência de Dados.*
+
+Este repositório documenta a implementação prática de uma infraestrutura robusta na Amazon Web Services (AWS). O projeto simula um cenário real de produção, onde foi criada uma rede privada virtual (VPC) segmentada para hospedar uma aplicação Node.js (EC2) que se comunica de forma segura com um banco de dados relacional (RDS) e um serviço de armazenamento de objetos (S3).
+
+---
+
+## 📐 Arquitetura da Solução
+
+O diagrama abaixo ilustra a topologia da rede implementada. A arquitetura segue o princípio de **privilégio mínimo**, garantindo que o banco de dados permaneça isolado da internet pública, acessível apenas pela camada de aplicação.
+
+![Diagrama de Arquitetura](ArquiteturaDrawio.jpg)
+
+---
+
+## 🚀 Etapa 1: Infraestrutura de Rede (VPC)
+
+O alicerce do projeto foi a criação de uma **VPC (Virtual Private Cloud)** personalizada, fugindo das configurações padrão para garantir controle total sobre o endereçamento de IP e rotas.
+
+### 1.1 Planejamento de Sub-redes
+Defini uma estratégia de segmentação de rede:
+* **Sub-redes Públicas:** Para recursos que precisam de acesso à internet (Application Layer).
+* **Sub-redes Privadas:** Para recursos sensíveis como o Banco de Dados (Data Layer).
+
+![Configuração da VPC](vpc-configuracao-1.jpg)
+
+### 1.2 Provisionamento
+Utilizei o fluxo de trabalho da AWS para criar simultaneamente a VPC, Sub-redes, Tabelas de Rotas e Internet Gateways, garantindo a conectividade interna e externa necessária.
+
+![VPC Criada com Sucesso](vpc-criada-4.jpg)
+
+---
+
+## 🛡️ Etapa 2: Segurança de Rede (Security Groups)
+
+A segurança foi implementada através de **Security Groups** (Firewall Stateful), controlando rigorosamente o tráfego de entrada (Inbound) e saída (Outbound).
+
+### 2.1 Web Security Group (EC2)
+Para a instância da aplicação, configurei regras específicas:
+* **HTTP (80):** Aberto para o mundo (`0.0.0.0/0`), permitindo acesso à API.
+* **SSH (22) - Hardening:** Acesso restrito estritamente ao **meu endereço IP pessoal**. Isso impede ataques de força bruta e acesso não autorizado ao terminal administrativo.
+
+![Security Group Web](vpc-security-group-2.jpg)
+
+### 2.2 Database Security Group (RDS)
+Para o banco de dados, a segurança é ainda mais restritiva:
+* **PostgreSQL (5432):** A origem do tráfego **NÃO** é um IP, mas sim o **ID do Security Group da Web** (`sg-web-projeto02`).
+* *Resultado:* O banco de dados aceita conexões apenas se elas vierem da nossa instância EC2. Qualquer tentativa de conexão direta da internet é bloqueada.
+
+![Security Group Database](vpc-db-security-group-3.jpg)
+
+---
+
+## 🔐 Etapa 3: Gestão de Identidade e Acesso (IAM)
+
+Para permitir que a instância EC2 interaja com outros serviços da AWS de forma segura e auditável, foi necessário configurar uma Role no IAM.
+
+> **Nota sobre o Ambiente (Escola da Nuvem):**
+> Devido às políticas de segurança da organização educacional, a criação de novas Roles do zero é restrita.
+
+**Solução Aplicada:**
+Identifiquei e editei uma Role existente (`voclabs`), ajustando a **Trust Policy (Política de Confiança)**. Adicionei o serviço `ec2.amazonaws.com` na ação `sts:AssumeRole`. Isso autoriza as instâncias EC2 a "vestirem" essa credencial para realizar ações na conta.
+
+![Política de Confiança IAM](IAM-politica-de-seguranca-11.jpg)
+
+---
+
+## 🗄️ Etapa 4: Banco de Dados Gerenciado (RDS)
+
+Provisionamento da camada de persistência utilizando o **Amazon RDS**, garantindo alta disponibilidade e menor overhead administrativo.
+
+### 4.1 Configuração da Engine
+Optei pelo **PostgreSQL** pela sua robustez, conformidade com SQL e suporte a dados complexos.
+
+![Seleção PostgreSQL](db-criacao-rds-6.jpg)
+
+### 4.2 Credenciais e Segurança
+Definição do usuário master (`postgres`) e geração de uma senha forte para administração do cluster.
+
+![Configuração de Credenciais](rds-configuracao-senha-7.jpg)
+
+### 4.3 Otimização de Custos
+Ajuste da classe da instância para `db.t4g.micro`, garantindo performance adequada para desenvolvimento dentro dos limites do **AWS Free Tier**.
+
+![Estimativa de Custos](rds-criando-8.jpg)
+
+### 4.4 Deploy
+O banco foi implantado com sucesso na sub-rede privada, protegido pelos Security Groups configurados anteriormente.
+
+![RDS Confirmado](rds-criando-confirmada-9.jpg)
+
+---
+
+## 📦 Etapa 5: Armazenamento de Objetos (S3)
+
+Criação de um **Bucket S3** (`bucketbackendprojeto02`) fora da VPC. Este recurso serve como repositório escalável para arquivos estáticos, logs e backups, acessível via API da AWS.
+
+![Bucket S3 Criado](s3-bucket-criado-10.jpg)
+
+---
+
+## 💻 Etapa 6: Configuração do Ambiente (Linux/EC2)
+
+Com a infraestrutura pronta, iniciei a configuração do servidor de aplicação.
+
+### 6.1 Acesso Remoto Seguro
+Utilizando o **Git Bash** e o par de chaves criptográficas (`.pem`), estabeleci uma conexão SSH segura com a instância Amazon Linux.
+
+![Conexão SSH Git Bash](ec2-conexao-ssh-5.jpg)
+
+### 6.2 Preparação do Sistema
+No terminal Linux, realizei a atualização dos pacotes do sistema e a instalação das dependências necessárias para a aplicação:
+* Instalação do **Node.js** (v18).
+* Instalação das bibliotecas nativas (`libbrotli`, etc).
+
+![Instalação Node.js e Pacotes](ssh-preparando-ambiente-12.jpg)
+
+---
+
+## 🔌 Etapa 7: Validação e Persistência de Dados
+
+Para provar a integração total da arquitetura, desenvolvi scripts em Node.js diretamente na instância.
+
+### 7.1 Teste de Conectividade
+O script inicial conectou-se ao endpoint do RDS, validando:
+1.  Resolução de DNS (VPC).
+2.  Permissão de Firewall (Security Group).
+3.  Autenticação (Usuário/Senha).
+
+![Conexão com Sucesso](rds-conexao-feita-13.jpg)
+
+### 7.2 Manipulação de Dados Real (CRUD)
+Execução de um script avançado que realizou operações de escrita e leitura no banco:
+* **CREATE:** Criou a tabela `usuarios` automaticamente.
+* **INSERT:** Inseriu um registro de teste ("Dev AWS 617").
+* **SELECT:** Consultou e exibiu os dados no terminal.
+
+Este passo confirma que a aplicação tem permissões funcionais de leitura e escrita no banco de dados na nuvem.
+
+![Tabela Criada e Dados Inseridos](rds-tabela-criada-14.jpg)
+
+---
+
+## 🏆 Conclusão e Aprendizados
+
+Este laboratório consolidou conhecimentos fundamentais de Arquitetura em Nuvem:
+* **Networking:** Criação de VPCs e Subnets seguras.
+* **Compute:** Gerenciamento de servidores Linux na nuvem.
+* **Security:** Implementação de firewalls (SG) e gestão de identidades (IAM).
+* **Database:** Integração entre aplicação e banco de dados relacional.
+
+---
+
+*Projeto desenvolvido como parte da formação prática em AWS Cloud.*
